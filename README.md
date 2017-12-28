@@ -1,4 +1,4 @@
-# ls-ttyUSB.sh
+# ls-ttyusb.sh
 
 This tool was inspired by the information found
 [here](http://hintshop.ludvig.co.nz/show/persistent-names-usb-serial-devices/) and
