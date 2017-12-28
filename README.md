@@ -2,7 +2,7 @@
 
 This tool was inspired by the information found
 [here](http://hintshop.ludvig.co.nz/show/persistent-names-usb-serial-devices/) and
-[here](https://unix.stackexchange.com/questions/204829/attributes-from-various-parent-devices-in-a-udev-rule)
+[here](https://unix.stackexchange.com/questions/204829/attributes-from-various-parent-devices-in-a-udev-rule).
 
 A simple bash script that extracts information for /dev/ttyUSB devices,
 using "udevadm info". Uses the results to generate some comments and build 
