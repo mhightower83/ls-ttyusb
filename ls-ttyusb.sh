@@ -114,7 +114,7 @@ setItemVarables() {
       fi
     done < <( 
         udevadm info $1 -x |
-        grep -f <( echo -e $itemEnvList | sed -e 's/$/=/g' ) |
+        grep -f <( echo -e $itemEnvList | sed -e 's/$/=/g;s/^/: /g' ) |
         head -$numItemEnv |
         sed -e 's/^E:[[:space:]]*//g;s/[[:space:]]*\$//g' |
         sed  's/=/ /')
