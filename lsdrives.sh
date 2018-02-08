@@ -14,9 +14,9 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 #
-# lsflash.sh
+# lsdrives.sh
 #
-# Attempts to locate USB connected block devices.
+# Attempts to associate a /dev/sd... with a block device description.
 #
 namesh="${0##*/}"
 
