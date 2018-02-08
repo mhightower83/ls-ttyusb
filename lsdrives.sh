@@ -57,7 +57,8 @@ findDrives() {
       echo "Specificly, /dev/disk/by-id/* shows no devices."
       return 1
     else
-      devicename="${devLink#/dev/disk/by-id/usb-}"
+      devicename="${devLink#/dev/disk/by-id/}"
+      devicename="${devicename/#wwn-*/}"
       sdValue=$(readlink -n -f "${devLink}")
       if [[ -n ${devicename} ]] && [[ -n ${sdValue} ]] && [[ -f /sys/class/block/${sdValue##/dev*/}/size ]]; then
         sizeis="$((512*$(</sys/class/block/${sdValue##/dev*/}/size)))"
