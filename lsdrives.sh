@@ -24,7 +24,7 @@ printUsage(){
   local namesh=`basename $0`
   cat <<EOF
 
-A simple bash script that attempts to extracts information on block
+A simple bash script that attempts to extract information on block
 devices. You must decide which is the device you are looking for.
 
 
