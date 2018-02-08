@@ -53,17 +53,24 @@ findUsbFlash() {
   printOnce="Device|Size|Description"
 
   for devLink in /dev/disk/by-id/usb-*; do
-    devicename="${devLink#/dev/disk/by-id/usb-}"
-    sdValue=$(readlink -n -f "${devLink}")
-    sizeis="$((512*$(</sys/class/block/${sdValue##/dev*/}/size)))"
-    if [[ ${sizeis} -ne 0 ]]; then
-      if [[ -n ${printOnce} ]]; then
-        echo "${printOnce}"
-        unset printOnce
+    if [[ "/dev/disk/by-id/usb-*" == "${devLink}" ]]; then
+      echo "No USB Disk devices found"
+      return 1
+    else
+      devicename="${devLink#/dev/disk/by-id/usb-}"
+      sdValue=$(readlink -n -f "${devLink}")
+      if [[ -n ${devicename} ]] && [[ -n ${sdValue} ]] && [[ -f /sys/class/block/${sdValue##/dev*/}/size ]]; then
+        sizeis="$((512*$(</sys/class/block/${sdValue##/dev*/}/size)))"
+        if [[ ${sizeis} -ne 0 ]]; then
+          if [[ -n ${printOnce} ]]; then
+            echo "${printOnce}"
+            unset printOnce
+          fi
+          description="${devicename//[_-]/ }"
+          description="${description//  / }"
+          echo "${sdValue}|${sizeis}|${description}"
+        fi
       fi
-      description="${devicename//[_-]/ }"
-      description="${description//  / }"
-      echo "${sdValue}|${sizeis}|${description}"
     fi
   done
 }
