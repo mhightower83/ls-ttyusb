@@ -1,4 +1,4 @@
-# misc-misc
+# misc-bash
 
-These are some miscellaneous Linux bash scripts.
+Miscellaneous Linux bash scripts.
 See [Wiki](https://github.com/mhightower83/ls-misc/wiki) for details.
