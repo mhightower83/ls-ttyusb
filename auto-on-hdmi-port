@@ -97,7 +97,7 @@ mutexHid="${mutexBase}.hid"
 
 #
 #
-# A sandbox for testing without running as root, just place the script in a 
+# A sandbox for testing without running as root, just place the script in a
 # folder named sandbox. Mostly used for testing install and uninstall
 #
 #
@@ -291,7 +291,7 @@ fi
 if [[ "--power-on" = "${option}" ]]; then
   [[ -n "${1}" ]] && timeOut=${1}
   powerOnHdmiDevice "${timeOut}" >>${debuglog} 3>&1
-  rc=$? 
+  rc=$?
   ( [[ $rc -eq 500 ]] || [[ -n "${debugOption}" ]] ) && exit $rc;
   exit 0
 fi
@@ -398,7 +398,7 @@ udev_hack_txt() {
 cat >&2 << /EOF
 
 It has been observed that  the systemd-udevd daemon, on Raspbian systems,
-is running with with the root filesystem, "/", mounted RO! Thus all 
+is running with with the root filesystem, "/", mounted RO! Thus all
 scripts launched by it, don't have write permission on some files/sockets.
 This service attempts to work around that problem.
 
@@ -483,7 +483,7 @@ Usage for "${namesh_full}":
   ${namesh} --help-dev
 
 `sed -e 's/^\s*//;s/\s*$//' << /EOR | tr '\n' ' ' | fmt -u -g64 | sed -e 's/^/    /'
-    Prints help on some depricated options that were used during develpment.
+    Prints help on some deprecated options that were used during development.
 /EOR`
 
 /EOF
