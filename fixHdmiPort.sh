@@ -43,6 +43,21 @@
 # This options requires that "at" be installed.
 # ACTION=="add", SUBSYSTEM=="hidraw", KERNEL=="hidraw*", RUN+="/usr/local/bin/fixHdmiPort.sh --detach 120"
 
+printVar() {
+  eval var="\${$1}"
+  echo "${1}=${var}"
+}
+
+option="${1,,}"
+shift
+unset debugOption
+[[ "${option}" = "--debug" ]] && { option="${1,,}"; shift; debugOption=1; }
+
+returnSuccess() {
+  echo "returnSucess ${*}" >&2
+  timeout 1s cat - >&2
+  return 0
+}
 
 # Where things are or go
 # tvservice="/opt/vc/bin/tvservice"
@@ -50,10 +65,12 @@ tvservice="/usr/bin/tvservice"
 fbset="/bin/fbset"
 udevadm="/sbin/udevadm"
 systemctl="/bin/systemctl"
+run_at="/usr/bin/at"
 
 displayCache="/usr/local/etc/displayCache"
 debuglog=/tmp/debug.log
-#debuglog=/dev/null
+unset debuglog
+[[ -z "${debuglog}" ]] && { [[ -z "${debugOption}" ]] && debuglog=/dev/null || debuglog=/dev/stdout; }
 
 udev_restart="udev-restart-after-boot.service"
 udev_rules="10-hid-trigger.rules"
@@ -68,16 +85,11 @@ eval namesh_full="${0}"
 [[ -s "${namesh_full}" ]] && [[ -x "${namesh_full}" ]] || { echo "**** Internal logic error in expanding path">&2; exit 100; }
 namesh="${namesh_full##*/}"
 
-mutexBase="/var/run/${namesh}.mutex"
-mutexCache="${mutexBase}.cache"
+mutexBase="/run/${namesh}.mutex"
+mutexCache="${mutexBase}.update"
 mutexHid="${mutexBase}.hid"
 
-returnSuccess() {
-  echo "returnSucess ${*}" >&2
-  return 0
-}
-
-# A sanbox for testing, just run the script from a folder named sandbox.
+# A self cooperative sandbox for testing, just run the script from a folder named sandbox.
 if [[ "${namesh_full##*/sandbox/}" = "${namesh_full##*/}" ]]; then
 sandbox="${namesh_full%/${namesh}}"
 udev_restart_full="${sandbox}/system/${udev_restart}"
@@ -85,6 +97,10 @@ udev_rules_full="${sandbox}/udev/${udev_rules}"
 rc_local_full="${sandbox}/etc/${rc_local}"
 displayCache="${sandbox}/etc/displayCache"
 debuglog="${sandbox}/debug.log"
+unset debuglog
+[[ -z "${debuglog}" ]] && { [[ -z "${debugOption}" ]] && debuglog=/dev/null || debuglog=/dev/stdout; }
+# printVar debuglog
+
 mutexBase="${sandbox}/run/${namesh}.mutex"
 mutexCache="${mutexBase}.cache"
 mutexHid="${mutexBase}.hid"
@@ -94,6 +110,7 @@ tvservice="returnSuccess ${tvservice}"
 fbset="returnSuccess ${fbset}"
 udevadm="returnSuccess ${udevadm}"
 systemctl="returnSuccess ${systemctl}"
+run_at="returnSuccess ${run_at}"
 else
 unset sandbox
 fi
@@ -108,38 +125,6 @@ timeOut=30
 minShieldTime=5
 
 
-trap "echo \"($$) Failed \`date '+%s'\`\";[[ ${debuglog} != \"/dev/null\" ]] && [[ -f ${debuglog} ]] && chmod 666 ${debuglog};" EXIT
-
-option="${1,,}"
-shift
-
-if [[ "${option}" = "--detach" ]]; then
-  if ! [[ -e "${mutexhid}" ]]; then
-    # this works - keep
-    echo "${namesh_full} --power-on ${1} >${debuglog} 2>&1; chmod 666 ${debuglog}" | /usr/bin/at now
-#
-# Note, if I don't detach in some way udev will let me run and call
-# sleep over a period of 57 seconds before it starts complaining.
-# In general that should be long enough, then there is no need to install "at"
-# and use --detach.
-#
-# These don't work when called via udev RUN+=, they die in their sleep:
-# udev daemon appears to terminate detached jobs, that try to sleep,
-# with extream prejudice. "trap ..."  do not get an opertunity to cleanup.
-#   { $( nohup ${0} --power-on </dev/null >/dev/null 2>&1 & ) & } &
-#   { $( ${0} --power-on </dev/null >>${debuglog} 2>&1 & ) & } &
-#   ${0} --power-on </dev/null >>${debuglog} 2>&1 & disown
-#   { nohup "${0}" "--power-on" </dev/null >/dev/null 2>&1 & } &
-#   { nohup "${0}" "--power-on" & } &
-  fi
-  exit 0
-fi
-
-printVar() {
-  eval var="\${$1}"
-  echo "${1}=${var}"
-}
-
 needRoot() {
   [[ -n "${sandbox}" ]] && return 0;
   if [[ $UID -ne 0 ]]; then
@@ -153,20 +138,25 @@ needRoot() {
 }
 
 doMutex() {
-  trap "echo \"($$) doMutex failed \`date '+%s'\`\"; [[ ${debuglog} != \"/dev/null\" ]] && [[ -f ${debuglog} ]] && chmod 666 ${debuglog};" EXIT
-  echo "($$) doMutex: `date '+%s'`"
+  echo "($$) doMutex: ${1} `date '+%s'`"
   if ! ( mkdir "${1}" ); then
     # An instance is already running - get out.
     return 100
   fi
-  echo "($$) Got mutex `date '+%s'`"
-  trap "echo \"($$) Exit \`date '+%s'\`\";rmdir \"${1}\";[[ ${debuglog} != \"/dev/null\" ]] && [[ -f ${debuglog} ]] && chmod 666 ${debuglog};" EXIT
+  echo "($$) Got mutex: ${1} `date '+%s'`"
+  trap "echo \"($$) Exit \`date '+%s'\`\"; { rmdir \"${1}\" && echo \"($$) Released mutex\"; }; [[ -f ${debuglog} ]] && chmod 666 ${debuglog}; " EXIT
+  return 0
 }
 
-
 updateDisplayCache() {
-  local rc
-  doMutex "${mutexCache}" || return $?
+  local rc=
+  needRoot || return $?
+
+  # The 1st mutex we set and leave to indicate we are or have run.
+  doMutex "${mutexBase}" || { rc=$? && echo "($$) Mutex: ${mutexBase} already taken. (rc=${rc})" && return $rc; }
+
+  # Then 2nd mutex inicates we are running
+  doMutex "${mutexCache}" || { rc=$? && echo "($$) Mutex: ${mutexCache} already taken. **** Internal Error ****." && return $rc; }
 
   [[ -n "${1}" ]] && eval displayCache="${1}"
   [[ -n "${displayCache}" ]] || return 1;
@@ -187,6 +177,7 @@ updateDisplayCache() {
   else
     echo "${name}=${geometry}" >>${displayCache}
   fi
+
   return 0
 }
 
@@ -194,7 +185,7 @@ waitForDisplayAndSetup() {
   # Wait for Display to be connected to HDMI port
   # This is indicated by the device_name becoming available
   unset name
-  echo "($$) timeOut=${1}" >>${debuglog}
+  echo "($$) timeOut=${1}"
   loopCount=0
   while [[ -z "${name}" ]]; do
     name=`${tvservice} -n 2>/dev/null`
@@ -238,6 +229,11 @@ waitForDisplayAndSetup() {
 
 powerOnHdmiDevice() {
   local rc
+  needRoot || return $?
+
+  # We should not run if updateDisplayCache has not run and completed first.
+  [[ -d "${mutexBase}" ]] || { echo "($$) Base mutex missing."; return 100; }
+  [[ -d "${mutexCache}" ]] && { echo "($$) Blocked, ${mutexCache} still running."; return 100; }
   doMutex "${mutexHid}" || return $?
 
   elapseTime=`date '+%s'`
@@ -253,31 +249,56 @@ powerOnHdmiDevice() {
 
 #
 #
+# Main
 #
 #
 
+trap "echo \"($$) Failed \`date '+%s'\`\";[[ ${debuglog} != \"/dev/null\" ]] && [[ -f ${debuglog} ]] && chmod 666 ${debuglog};" EXIT
+
 if [[ "--update-cache" = "${option}" ]]; then
-  needRoot || exit $?
-  updateDisplayCache
+  updateDisplayCache >>${debuglog} 2>&1 || { rc=$?; [[ $rc -eq 500 ]] && exit $rc; };
   exit 0
 fi
 
-# If no option and NOT running interactively, make an assumption of what to do
-[[ -z "${PS1}" ]] && [[ -z "${option}" ]] && option="--power-on"
+#D # If no option and NOT running interactively, make an assumption of what to do
+#D [[ -z "${debugOption}" ]] && [[ -z "${option}" ]] && option="--power-on"
 
 if [[ "--power-on" = "${option}" ]]; then
-  needRoot || exit $?
   [[ -n "${1}" ]] && timeOut=${1}
   powerOnHdmiDevice "${timeOut}" >>${debuglog} 2>&1
-  rc=$?
-  [[ -z "${PS1}" ]] && rc=0
-  exit $rc
+  rc=$? 
+  ( [[ $rc -eq 500 ]] || [[ -n "${debugOption}" ]] ) && exit $rc;
+  exit 0
+fi
+
+trap "" EXIT
+
+if [[ "${option}" = "--detach" ]]; then
+  if ! [[ -e "${mutexhid}" ]]; then
+    # this works - keep
+    echo "${namesh_full} --power-on ${1} >${debuglog} 2>&1; [ -f \"${debuglog}\" ] && chmod 666 ${debuglog};" | ${run_at} now
+#
+# Note, if I don't detach in some way udev will let me run and call
+# sleep over a period of 57 seconds before it starts complaining.
+# In general that should be long enough, then there is no need to install "at"
+# and use --detach.
+#
+# These don't work when called via udev RUN+=, they die in their sleep:
+# udev daemon appears to terminate detached jobs, that try to sleep,
+# with extream prejudice. "trap ..."  do not get an opertunity to cleanup.
+#   { $( nohup ${0} --power-on </dev/null >/dev/null 2>&1 & ) & } &
+#   { $( ${0} --power-on </dev/null >>${debuglog} 2>&1 & ) & } &
+#   ${0} --power-on </dev/null >>${debuglog} 2>&1 & disown
+#   { nohup "${0}" "--power-on" </dev/null >/dev/null 2>&1 & } &
+#   { nohup "${0}" "--power-on" & } &
+  fi
+  exit 0
 fi
 
 
 #
 #
-# Install helpers
+# Install Helpers
 #
 #
 
@@ -297,6 +318,18 @@ if [ -s "${namesh_full}" ] && [ -x "${namesh_full}" ]; then # ${1}
   ${namesh_full} --update-cache # ${1}
 fi # ${1}
 exit 0
+/EOF
+}
+
+run_at_boot_txt() {
+cat >&2 << /EOF
+
+/EOF
+
+cat << /EOF
+[unit]
+RuntimeDirectory=
+RuntimeDirectoryMode=
 /EOF
 }
 
@@ -355,7 +388,7 @@ WantedBy=multi-user.target
 /EOF
 }
 
-printusage() {
+printUsage() {
 cat << /EOF
 
 Usage for "${namesh_full}":
@@ -405,10 +438,7 @@ generateFiles() {
   echo ""
 }
 
-installit() {
-  local rc
-  needRoot || return $?;
-
+install_udev_rule() {
   # setup udev rule
   echo -e "\nWriting udev rules file ${udev_rules_full} ..."
   if [[ -s "${udev_rules_full}" ]]; then
@@ -420,7 +450,9 @@ installit() {
   else
     udev_rule_txt "[${uninstallTag}] - Install tag, do not remove." 2>/dev/null >"${udev_rules_full}"
   fi
+}
 
+install_udev_fix() {
   # Install udev deamon hack/fix
   echo -e "\nInstalling ${udev_restart_full} ..."
   if [[ -s "${udev_restart_full}" ]]; then
@@ -435,7 +467,9 @@ installit() {
     ${systemctl} enable "${udev_restart}"
     ${systemctl} start "${udev_restart}"
   fi
+}
 
+install_rc_local() {
   # Update rc.local
   echo -e "\nModifying ${rc_local_full} ..."
   # Expression inspired by: https://unix.stackexchange.com/questions/60994/how-to-grep-lines-which-does-not-begin-with-or
@@ -447,16 +481,17 @@ installit() {
 
     # Make backup copy of rc.local and remove trailing empty lines at bottom of file
   elif \
-    cp "${rc_local_full}" "${rc_local_full}.bak" \
+    cp -p "${rc_local_full}" "${rc_local_full}.bak" \
     && echo "" >>"${rc_local_full}.bak" \
-    && chmod 755 "${rc_local_full}.bak" \
     && echo "Created backup file \"${rc_local_full}.bak\"" \
    ; then
     # sed incantation inspired by https://unix.stackexchange.com/a/41849
     # changed to this one https://unix.stackexchange.com/a/323951
     # use of tac inspired by https://stackoverflow.com/a/23894449
     echo "Triming empty lines ..."
-    tac "${rc_local_full}.bak" | sed '/\S/,$!d' | tac > "${rc_local_full}~~~" && mv "${rc_local_full}~~~" "${rc_local_full}"
+    tac "${rc_local_full}.bak" | sed '/\S/,$!d' | tac > "${rc_local_full}~~~" \
+      && chmod --reference="${rc_local_full}" "${rc_local_full}~~~" \
+      && mv "${rc_local_full}~~~" "${rc_local_full}" 
     echo "Checking for a last command of \"exit 0\" ..."
     lastLine=`wc -l "${rc_local_full}" | cut -d\  -f1`
     exitLine=`grep -nixE '[^#]*exit[[:blank:]][[:blank:]]*00*[[:blank:]]*(#.*)*$' "${rc_local_full}" | cut -d: -f1 | tail -1`
@@ -481,6 +516,16 @@ installit() {
       echo "Add the content shown below to \"${rc_local_full}\":"
       rc_local_txt 2>/dev/null
   fi
+}
+
+
+installit() {
+  local rc
+  needRoot || return $?;
+  install_udev_rule
+  install_udev_fix
+  install_rc_local
+
   echo -e "\nRestarting udevadm ..."
   ${udevadm} control --reload-rules && ${udevadm} trigger
   echo -e "\nFinished."
@@ -516,7 +561,7 @@ ${systemctl} disable "${udev_restart_full}"
 ${systemctl} daemon-reload
 rm "${udev_restart_full}"
 
-if cp  "${rc_local_full}" "${rc_local_full}.bak"; then
+if cp -p  "${rc_local_full}" "${rc_local_full}.bak"; then
   grep -v "\[${uninstallTag}\]" "${rc_local_full}" > "${rc_local_full}~~~~~" \
   && mv "${rc_local_full}~~~~~" "${rc_local_full}" \
   || ( [[ -f "${rc_local_full}~~~~~" ]] && rm "${rc_local_full}~~~~~" )
@@ -527,11 +572,12 @@ fi
 /EOF
 return 0
 }
+
 uninstallit() {
   local rc
   needRoot || return $?;
 
-  uninstallDelay=5
+  uninstallDelay=1
   echo -e "\nBegin uninstalling ${udev_rules} ..."
   sleep ${uninstallDelay}
   removeFile "${udev_rules_full}"
@@ -547,9 +593,9 @@ uninstallit() {
   echo -e "\nBegin uninstalling changes made to ${rc_local_full} ..."
   sleep ${uninstallDelay}
   if [[ -f "${rc_local_full}" ]]; then
-    if cp  "${rc_local_full}" "${rc_local_full}.bak"; then
+    if cp -p  "${rc_local_full}" "${rc_local_full}.bak"; then
       grep -v "\[${uninstallTag}\]" "${rc_local_full}" > "${rc_local_full}~~~~~" \
-      && chmod 755  "${rc_local_full}~~~~~" \
+      && chmod --reference="${rc_local_full}" "${rc_local_full}~~~~~" \
       && mv "${rc_local_full}~~~~~" "${rc_local_full}" \
       && echo -e "uinstall finished.\n"\
       || ( [[ -f "${rc_local_full}~~~~~" ]] && rm "${rc_local_full}~~~~~"  \
@@ -567,13 +613,13 @@ uninstallit() {
 [[ "${option}" = "--print-udev-rule" ]] && { udev_rule_txt; exit 0; }
 [[ "${option}" = "--print-udev-hack" ]] && { udev_hack_txt; exit 0; }
 [[ "${option}" = "--save-files"      ]] && { generateFiles; exit 0; }
-[[ "${option}" = "--help"            ]] && { printusage;    exit 0; }
+[[ "${option}" = "--help"            ]] && { printUsage;    exit 0; }
 # Experimental install and uninstall
 [[ "${option}" = "--install"         ]] && { installit;     exit 0; }
 [[ "${option}" = "--uninstall-help"  ]] && { uninstallHelp; exit 0; }
 [[ "${option}" = "--uninstall"       ]] && { uninstallit;   exit 0; }
 
-printusage
+printUsage
 exit 0
 
 
