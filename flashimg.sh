@@ -42,12 +42,12 @@ Usage:
 
     $namesh
       Shows a list of Drives. The /dev/sd... device name, size of the device
-      (which might be a partition) and device name description are reported.
-      The list is filtered to remove mounted and ATA devices.
+      (which might be a partition) and the device name description is reported
+      for each. The list is filtered to remove mounted and ATA devices.
 
 
     $namesh rasbian.img
-      Write file named rasbian.img to flash device $flash_dev
+      Write a file named 'rasbian.img' to flash device $flash_dev
 
 
     $namesh [rasbian.img] [flash device name]
