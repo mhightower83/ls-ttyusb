@@ -47,7 +47,7 @@ Usage:
 
 
     $namesh rasbian.img
-      Write a file named 'rasbian.img' to flash device $flash_dev
+      Write a file named 'rasbian.img' to flash device '$flash_dev'
 
 
     $namesh [rasbian.img] [flash device name]
@@ -138,7 +138,7 @@ showIdleFlashDrv() {
 
       if [[ 0 -eq $rc ]]; then            # do this on success
         if [[ 0 -eq ${nmatch}  ]]; then   # 0 if not mounted
-          if [[ ${#} -eq 0 ]]; then       # no argument report available drives
+          if [[ ${#} -eq 0 ]]; then       # no argument, report available drives
             failed=0
             tmp="${tmp}"$( findDrives "${device}" )"\n"
           elif [[ "${1}" == "${device}" ]]; then
@@ -151,7 +151,9 @@ showIdleFlashDrv() {
             fi
           fi
         else
-          failed=5                        # drive mounted
+          if [[ ${#} -ne 0 ]] && [[ "${1}" == "${device}" ]]; then
+            failed=5                      # drive mounted
+          fi
         fi
       fi
     fi
@@ -178,8 +180,9 @@ showIdleFlashDrv() {
   fi
 
   if [[ 1 -eq $failed ]]; then
-    echo "All drives are mounted. To flash a drive it must not be mounted."
-    echo "When using the file GUI, be sure you use unmount and not eject on the drive."
+    echo -e "All drives are mounted. To flash a drive it must not be mounted."
+    echo -e "When using the file GUI, be sure you use unmount and not eject on the drive.\n"
+    findDrives | column -s\| -t
   else
     echo -e "\nThese are the drives currently available:\n"
     echo -e "${tmp}" | column -s\| -t
