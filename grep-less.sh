@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#   Copyright 2017 M Hightower
+#   Copyright 2022 M Hightower
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@
 # WIP
 
 # set config file
-DIALOGRC=/home/mhightow/.dialogrc.dark
+DIALOGRC=$( realpath ~/.dialogrc.dark )
 if [[ ! -s "$DIALOGRC" ]]; then
   unset DIALOGRC
 fi
