@@ -35,8 +35,8 @@ Usage:
   Supported operations:
 
     default
-      Shows a list of Drives. The /dev/sd... device name, size 
-      of the device (which might be a partition) and device name 
+      Shows a list of Drives. The /dev/sd... device name, size
+      of the device (which might be a partition) and device name
       description are reported.
 
     --help
@@ -87,4 +87,3 @@ exit 0
 
 
 # https://unix.stackexchange.com/questions/52215/determine-the-size-of-a-block-device
-
