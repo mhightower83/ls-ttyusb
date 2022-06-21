@@ -78,6 +78,16 @@ function statusfile() {
 export -f statusfile
 
 grep_tree() {
+  if [[ "--" == "${1:0:2}" ]]; then
+    # experimental - escaping for grep needs to be removed search pattern not compatable with less etc.
+    if hash rg 2>/dev/null; then
+      rg --files-with-matches "${@}" 2>/dev/null
+      return $?
+    else
+      rg --help
+      return 1
+    fi
+  fi
   search_tree_output=$(mktemp)
   search_tree_output_in=$(mktemp)
   unset options
@@ -137,6 +147,7 @@ function do_again() {
   # on descriptor 3
   exec 3>&1
 
+  # catch the output value
   menu_item=$(dialog \
     --no-collapse \
     --clear \
@@ -149,7 +160,7 @@ function do_again() {
     --column-separator "\t" \
     --title "Recursive Grep Results" \
     --default-item $menu_item \
-    --menu "Pick a file to view" 0 0 0 \
+    --menu "Primary search pattern, \"${grep_pattern}\", results. Pick a file to view:" 0 0 0 \
     --file $menu_config 2>&1 1>&3)
     # --file $menu_config 2>$menu_output
 
@@ -176,7 +187,7 @@ function do_again() {
     # select_action
     :
   else
-    # Exit/No/Cancel, ESC and everything else
+    # Exit/No/Cancel (1), ESC (255) and everything else
     return $rc
   fi
 
@@ -193,7 +204,7 @@ function do_again() {
   if [[ $rc == 0 ]]; then
     # echo -n "$file" | xclip -selection clipboard
     add2filehistory "$file"
-    less +$jumpto -p"${grep_pattern}" $ignore_case "$file"
+    less +$jumpto -N -p"${grep_pattern}" $ignore_case "$file"
     lastfile="$file"
     # echo "less +$jumpto -p\"${grep_pattern}\" $ignore_case \"$file\""
   elif [[ $rc == 3 ]]; then
@@ -284,7 +295,7 @@ fi
 
 if make_menu "$@"; then
   while :; do
-    do_again
+    do_again "$@"
     rc=$?
     if [[ $rc == 0 ]]; then     # OK
       :
@@ -295,6 +306,9 @@ if make_menu "$@"; then
       :
     elif [[ $rc == 3 ]]; then   # Extra
       :
+    elif [[ $rc == 255 ]]; then   # ESC
+      clear
+      break
     else
       clear
       echo "Error: $rc"
@@ -303,7 +317,7 @@ if make_menu "$@"; then
     fi
   done
   echo "$namesh "${cmd_args[@]}
-  echo " grep_pattern: \"${grep_pattern}\""
+  echo "  grep_pattern: \"${grep_pattern}\""
   printf '  %s\n' "${filehistory[@]}"
 else
   echo "Empty search results for:"

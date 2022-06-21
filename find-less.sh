@@ -162,13 +162,13 @@ function do_again() {
   if [[ $rc == 0 ]]; then
     # echo -n "$file" | xclip -selection clipboard
     add2filehistory "$file"
-    less +$jumpto "$file"
+    less +$jumpto -N "$file"
     lastfile="$file"
     # echo "less +$jumpto \"$file\""
   elif [[ $rc == 3 ]]; then
     if [[ -n "${lastfile}" ]]; then
       add2filehistory "$file"
-      diff "${lastfile}" "${file}" | less
+      diff -w "${lastfile}" "${file}" | less
     fi
     lastfile="${file}"
   elif [[ $rc == 2 ]]; then
@@ -263,6 +263,9 @@ elif [[ -z "${1}" ]]; then
     echo "No input"
     exit 255
   fi
+  # readarray -t cmd_args < <(
+  #   cat  $temp_io |
+  #   sed 's/.*<//;s/>*$//;s/[^"]*"//;s/"*$//;s:.*/::' )
   readarray -t cmd_args < <(
     sed 's/#[[:blank:]]*include/#include/' $temp_io |
     grep '#include' |
