@@ -18,6 +18,9 @@
 #
 # WIP
 
+# EDITER='gedit +$jumpto "${file}"'
+EDITER='atom -a "${file}:${jumpto}"'
+
 # set config file
 DIALOGRC=$( realpath ~/.dialogrc.dark )
 if [[ ! -s "$DIALOGRC" ]]; then
@@ -173,7 +176,9 @@ function do_again() {
     lastfile="${file}"
   elif [[ $rc == 2 ]]; then
     add2filehistory "$file"
-    gedit "$file" +$jumpto
+    eval $EDITER
+    # gedit +$jumpto "$file"
+    # atom -a "${file}:${jumpto}"
     lastfile="$file"
   fi
   return $rc
