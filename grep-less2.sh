@@ -26,6 +26,9 @@
 : ${DIALOG_ITEM_HELP=4}
 : ${DIALOG_ESC=255}
 
+# EDITER='gedit +$jumpto "${file}"'
+EDITER='atom -a "${file}:${jumpto}"'
+
 # set config file
 DIALOGRC=$( realpath ~/.dialogrc.dark )
 if [[ ! -s "$DIALOGRC" ]]; then
@@ -37,12 +40,12 @@ cmd_args="$@"
 
 unset ignore_case
 if [[ "-" == "${1:0:1}" ]]; then
-  grep_pattern=$(echo -n "${2}" | sed 's/(/\\(/g; s/)/\\)/g' )
   if [[ "-i" == "${1:0:2}" ]]; then
     ignore_case="-i"
   fi
+  grep_pattern="${2}"
 else
-  grep_pattern=$(echo -n "${1}" | sed 's/(/\\(/g; s/)/\\)/g' )
+  grep_pattern="${1}"
 fi
 
 function print_help() {
@@ -70,9 +73,21 @@ function statusfile3() {
   stat --print=" %.19y %8s %h  %N\n" "${1}"
 }
 
-function statusfile() {
+function statusfile4() {
   declare -a list=( $( sha1sum "$1" | sed 's: .*/: :' | tr "\n" " " ) )
   printf "%s %${maxwidth}s  " "${list[@]}"
+  stat --print="%.19y %8s %h  %N\n" "${1}"
+}
+
+function statusfile5() {
+  list=$( sha1sum "$1" | sed 's: .*/: :' | tr "\n" " " )
+  printf "%s %${maxwidth}s  " "${list%% *}" "${list#* }"
+  stat --print="%.19y %8s %h  %N\n" "${1}"
+}
+
+function statusfile() {
+  list=$( sha1sum "$1" )
+  printf "%s %${maxwidth}s  " "${list%% *}" "${list##*/}"
   stat --print="%.19y %8s %h  %N\n" "${1}"
 }
 export -f statusfile
@@ -127,7 +142,7 @@ function select_action() {
     --radiolist 'Select OK action' 10 25 5 \
     'less' 1 'off' \
     'diff' 2 'off' \
-    'gedit' 3 'off' 2>&1 1>&3)
+    'Edit' 3 'off' 2>&1 1>&3)
 
   rc=$?
   exec 3>&-
@@ -140,13 +155,13 @@ function select_action() {
 }
 
 function do_again() {
-  #launch the dialog, get the output in the menu_output file
-  # --no-cancel
+  [[ -z "${menu_item}" ]] && menu_item=1
 
   # Duplicate (make a backup copy of) file descriptor 1
   # on descriptor 3
   exec 3>&1
 
+  # launch the dialog, get the output in the menu_output file
   # catch the output value
   menu_item=$(dialog \
     --no-collapse \
@@ -173,51 +188,77 @@ function do_again() {
   # menu_item=$(<$menu_output)
   echo "$menu_item"
 
-  if [[ $rc == 0 ]]; then
-    # the Yes or OK button.
-    # we use this for view/less
-    :
-  elif [[ $rc == 2 ]]; then
-    # --help-button was pressed.
-    # Repurpose for edit, skip "HELP " to get to the menu number
-    menu_item=${menu_item#* }
-  elif [[ $rc == 3 ]]; then
-    # --extra-button was pressed.
-    # We use this for diff
-    # select_action
-    :
-  else
-    # Exit/No/Cancel (1), ESC (255) and everything else
-    return $rc
-  fi
+  # if [[ $rc == 0 ]]; then
+  #   # the Yes or OK button.
+  #   # we use this for view/less
+  #   :
+  # elif [[ $rc == 2 ]]; then
+  #   # --help-button was pressed.
+  #   # Repurpose for edit, skip "HELP " to get to the menu number
+  #   menu_item=${menu_item#* }
+  # elif [[ $rc == 3 ]]; then
+  #   # --extra-button was pressed.
+  #   # We use this for diff
+  #   # select_action
+  #   :
+  # else
+  #   # Exit/No/Cancel (1), ESC (255) and everything else
+  #   return $rc
+  # fi
+
+  case $rc in
+    $DIALOG_OK)
+      # the Yes or OK button.
+      # we use this for view/less
+      ;;
+    $DIALOG_HELP)
+      # Repurpose for edit, skip "HELP " to get to the menu number
+      menu_item=${menu_item#* } ;;
+    $DIALOG_EXTRA)
+      # We use this for diff
+      ;;
+    # $DIALOG_ITEM_HELP)    # Item-help button pressed.
+    #   menu_item2=${menu_item2#* }
+    #   return $rc ;;
+    $DIALOG_CANCEL | $DIALOG_ESC)
+      # process as cancel/Exit
+      return 1 ;;
+    * )
+      # everything else
+      return $rc ;;
+  esac
 
   # recover the associated line in the output of the command
   # Format "* branch/tdescription"
   entry=$(sed -n "${menu_item}p" $command_output)
 
   #replace echo with whatever you want to process the chosen entry
-  echo "You selected: $entry"
+  echo "You selected: '$entry'"
   jumpto=1
   file=$( echo "$entry" | cut -d\' -f2 )
   file=$( realpath "$file" )
-
-  if [[ $rc == 0 ]]; then
+  if [[ -f "${file}" && -n "${grep_pattern}" ]]; then
+    jumpto=$( grep -nm1 "${grep_pattern}" "${file}" | cut -d\: -f1 )
+  fi
+  if [[ $rc == $DIALOG_OK ]]; then
     # echo -n "$file" | xclip -selection clipboard
     add2filehistory "$file"
     less +$jumpto -N -p"${grep_pattern}" $ignore_case "$file"
     lastfile="$file"
     # echo "less +$jumpto -p\"${grep_pattern}\" $ignore_case \"$file\""
-  elif [[ $rc == 3 ]]; then
+  elif [[ $rc == $DIALOG_EXTRA ]]; then
     if [[ -n "${lastfile}" ]]; then
       # echo -n "$file" | xclip -selection clipboard
       add2filehistory "$file"
       diff -w "${lastfile}" "${file}" | less
     fi
     lastfile="${file}"
-  elif [[ $rc == 2 ]]; then
+  elif [[ $rc == $DIALOG_HELP ]]; then
     # echo -n "$file" | xclip -selection clipboard
     add2filehistory "$file"
-    gedit "$file" +$jumpto
+    eval $EDITER
+    # gedit +$jumpto "$file"
+    # atom -a "${file}:${jumpto}"
     # less $menu_output
     lastfile="$file"
   fi
@@ -256,7 +297,7 @@ function make_menu() {
     maxwidth=$( sed 's:.*/: :' $temp_io | wc -L | cut -d' ' -f1 )
     export maxwidth
     cat $temp_io |
-      xargs -I {} bash -c 'statusfile "$@"' _ {} |
+      xargs -I {} bash -c 'statusfile "$1"' _ {} |
       sort >$command_output
     cut -c 34- $command_output |
       awk '{print NR " \"" $0 "\""}' |

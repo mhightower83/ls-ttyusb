@@ -58,15 +58,16 @@ function statusfile3() {
   stat --print=" %.19y %8s %h  %N\n" "${1}"
 }
 
-function statusfile() {
-  # sha1sum "$1" | cut -d' '   -f1 | tr "\n" "\t"
-  # sha1sum "$1" | sed 's: .*/:  :' | tr "\n" " "
-  declare -a list=( $( sha1sum "$1" | sed 's: .*/: :' | tr "\n" " " ) )
-  printf "%s %${maxwidth}s  " "${list[@]}"
+function statusfile4() {
+  list=$( sha1sum "$1" | sed 's: .*/: :' | tr "\n" " " )
+  printf "%s %${maxwidth}s  " "${list%% *}" "${list#* }"
   stat --print="%.19y %8s %h  %N\n" "${1}"
-  # stat --print="%.19y %8s %h\t" "${1}"
-  # echo -n "${1}" | sed 's:.*/::'
-  # stat --print="  %N\n" "${1}"
+}
+
+function statusfile() {
+  list=$( sha1sum "$1" )
+  printf "%s %${maxwidth}s  " "${list%% *}" "${list##*/}"
+  stat --print="%.19y %8s %h  %N\n" "${1}"
 }
 export -f statusfile
 
@@ -217,14 +218,14 @@ function make_menu() {
   fi
   search_tree "${namecase}" "$@" |
     sed '/^.\/.git/d' |
-    sed 's/"/\\"/g' >$command_output
+    sed 's:":\\":g' >$command_output
   if [[ -s $command_output ]]; then
     mv $command_output $temp_io
     # build a dialog menu configuration file
     maxwidth=$( sed 's:.*/: :' $temp_io | wc -L | cut -d' ' -f1 )
     export maxwidth
     cat $temp_io |
-      xargs -I {} bash -c 'statusfile "$@"' _ {} |
+      xargs -I {} bash -c 'statusfile "$1"' _ {} |
       sort >$command_output
     cut -c 34- $command_output |
       awk '{print NR " \"" $0 "\""}' |

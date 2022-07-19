@@ -18,6 +18,17 @@
 #
 # WIP
 
+# Define the dialog exit status codes
+: ${DIALOG_OK=0}
+: ${DIALOG_CANCEL=1}
+: ${DIALOG_HELP=2}
+: ${DIALOG_EXTRA=3}
+: ${DIALOG_ITEM_HELP=4}
+: ${DIALOG_ESC=255}
+
+# EDITER='gedit +$jumpto "${file}"'
+EDITER='atom -a ${file}:${jumpto}'
+
 # set config file
 DIALOGRC=$( realpath ~/.dialogrc.dark )
 if [[ ! -s "$DIALOGRC" ]]; then
@@ -29,12 +40,12 @@ cmd_args="$@"
 
 unset ignore_case
 if [[ "-" == "${1:0:1}" ]]; then
-  grep_pattern=$(echo -n "${2}" | sed 's/(/\\(/g; s/)/\\)/g' )
+  grep_pattern="${2}"
   if [[ "-i" == "${1:0:2}" ]]; then
     ignore_case="-i"
   fi
 else
-  grep_pattern=$(echo -n "${1}" | sed 's/(/\\(/g; s/)/\\)/g' )
+  grep_pattern="${1}"
 fi
 
 function print_help() {
@@ -161,7 +172,9 @@ function do_again() {
     lastfile="${file}"
   elif [[ $rc == 2 ]]; then
     add2filehistory "$file"
-    gedit "$file" +$jumpto
+    # eval $EDITER
+    # gedit +$jumpto "$file"
+    atom -a "${file}:${jumpto}"
     # less $menu_output
     lastfile="$file"
   fi
