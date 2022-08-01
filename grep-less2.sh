@@ -63,29 +63,6 @@ function add2filehistory() {
   filehistory[${#filehistory[@]}]="$1"
 }
 
-function statusfile2() {
-  # prop=$( stat --print="%.19y %8s %h" "${1}" )
-  # sha1sum $1 | sed "s/  /\t${prop}\t/"
-  sha1sum "$1" | cut -d' ' -f1 | tr "\n" "\t"
-  stat --print="%.19y %8s %h\t%N\n" "${1}"
-}
-function statusfile3() {
-  sha1sum "$1" | sed 's: .*/:  :' | tr "\n" " "
-  stat --print=" %.19y %8s %h  %N\n" "${1}"
-}
-
-function statusfile4() {
-  declare -a list=( $( sha1sum "$1" | sed 's: .*/: :' | tr "\n" " " ) )
-  printf "%s %${maxwidth}s  " "${list[@]}"
-  stat --print="%.19y %8s %h  %N\n" "${1}"
-}
-
-function statusfile5() {
-  list=$( sha1sum "$1" | sed 's: .*/: :' | tr "\n" " " )
-  printf "%s %${maxwidth}s  " "${list%% *}" "${list#* }"
-  stat --print="%.19y %8s %h  %N\n" "${1}"
-}
-
 function statusfile() {
   list=$( sha1sum "$1" )
   SHA1="${list%% *}"
@@ -193,24 +170,6 @@ function do_again() {
   # menu_item=$(<$menu_output)
   echo "$menu_item"
 
-  # if [[ $rc == 0 ]]; then
-  #   # the Yes or OK button.
-  #   # we use this for view/less
-  #   :
-  # elif [[ $rc == 2 ]]; then
-  #   # --help-button was pressed.
-  #   # Repurpose for edit, skip "HELP " to get to the menu number
-  #   menu_item=${menu_item#* }
-  # elif [[ $rc == 3 ]]; then
-  #   # --extra-button was pressed.
-  #   # We use this for diff
-  #   # select_action
-  #   :
-  # else
-  #   # Exit/No/Cancel (1), ESC (255) and everything else
-  #   return $rc
-  # fi
-
   case $rc in
     $DIALOG_OK)
       # the Yes or OK button.
@@ -250,7 +209,6 @@ function do_again() {
     add2filehistory "$file"
     less +$jumpto -N -p"${grep_pattern}" $ignore_case "$file"
     lastfile="$file"
-    # echo "less +$jumpto -p\"${grep_pattern}\" $ignore_case \"$file\""
   elif [[ $rc == $DIALOG_EXTRA ]]; then
     if [[ -n "${lastfile}" ]]; then
       # echo -n "$file" | xclip -selection clipboard
@@ -268,27 +226,6 @@ function do_again() {
     lastfile="$file"
   fi
   return $rc
-}
-
-function make_menu3() {
-  grep_tree "$@" |
-    cut -d':' -f1 | sort -u |
-    sed '/^.git/d' |
-    sed 's/"/\\"/g' >$command_output
-  if [[ -s $command_output ]]; then
-    #build a dialog configuration file
-    maxwidth=$( sed 's:.*/: :' $command_output | wc -L | cut -d' ' -f1 )
-    export maxwidth
-    cat $command_output |
-      xargs -I {} bash -c 'statusfile "$@"' _ {} |
-      sort |
-      cut -c 34- |
-      awk '{print NR "\t\"" $0 "\""}' |
-      tr "\n" " " >$menu_config
-  else
-    return 1
-  fi
-  return 0
 }
 
 function make_menu() {

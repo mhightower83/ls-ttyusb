@@ -27,7 +27,7 @@
 : ${DIALOG_ESC=255}
 
 # EDITER='gedit +$jumpto "${file}"'
-EDITER='atom -a ${file}:${jumpto}'
+EDITER='atom -a "${file}:${jumpto}"'
 
 # set config file
 DIALOGRC=$( realpath ~/.dialogrc.dark )
@@ -40,13 +40,14 @@ cmd_args="$@"
 
 unset ignore_case
 if [[ "-" == "${1:0:1}" ]]; then
-  grep_pattern="${2}"
   if [[ "-i" == "${1:0:2}" ]]; then
     ignore_case="-i"
   fi
+  grep_pattern="${2}"
 else
   grep_pattern="${1}"
 fi
+[[ -n "$ignore_case" && -n "$grep_pattern" ]] && grep_pattern="${grep_pattern,,}"
 
 function print_help() {
   cat <<EOF
@@ -62,12 +63,6 @@ function add2filehistory() {
   filehistory[${#filehistory[@]}]="$1"
 }
 
-function statusfile2() {
-  # prop=$( stat --print="%.19y %8s %h" "${1}" )
-  # sha1sum $1 | sed "s/  /\t${prop}\t/"
-  sha1sum "$1" | cut -d' ' -f1 | tr "\n" "\t"
-  stat --print="%.19y %8s %h\t%N\n" "${1}"
-}
 function statusfile() {
   sha1sum "$1" | sed 's: .*/:  :' | tr "\n" " "
   stat --print=" %.19y %8s %h  %N\n" "${1}"
@@ -108,10 +103,15 @@ grep_tree() {
 }
 
 function do_again() {
-  #launch the dialog, get the output in the menu_output file
-  # --no-cancel
-  # --column-separator "|-|-|-|"
-  dialog \
+  [[ -z "${menu_item}" ]] && menu_item=1
+
+  # Duplicate (make a backup copy of) file descriptor 1
+  # on descriptor 3
+  exec 3>&1
+
+  # launch the dialog, get the output in the menu_output file
+  # catch the output value
+  menu_item=$(dialog \
     --no-collapse \
     --clear \
     --extra-label "Diff Previous" \
@@ -123,31 +123,40 @@ function do_again() {
     --column-separator "|-|-|-|" \
     --title "Recursive Grep Results" \
     --default-item $menu_item \
-    --menu "Pick a file to view" 0 0 0 \
-    --file $menu_config 2>$menu_output
+    --menu "Primary search pattern, \"${grep_pattern}\", results. Pick a file to view:" 0 0 0 \
+    --file $menu_config 2>&1 1>&3)
+    # --file $menu_config 2>$menu_output
 
   rc=$?
 
+  # Close file descriptor 3
+  exec 3>&-
+
   # recover the output value
-  menu_item=$(<$menu_output)
+  # menu_item=$(<$menu_output)
   echo "$menu_item"
 
-  if [[ $rc == 0 ]]; then
-    # the Yes or OK button.
-    # we use this for view/less
-    :
-  elif [[ $rc == 2 ]]; then
-    # --help-button was pressed.
-    # Repurpose for edit, skip "HELP " to get to the menu number
-    menu_item=${menu_item#* }
-  elif [[ $rc == 3 ]]; then
-    # --extra-button was pressed.
-    # We use this for diff
-    :
-  else
-    # Exit/No/Cancel, ESC and everything else
-    return $rc
-  fi
+  case $rc in
+    $DIALOG_OK)
+      # the Yes or OK button.
+      # we use this for view/less
+      ;;
+    $DIALOG_HELP)
+      # Repurpose for edit, skip "HELP " to get to the menu number
+      menu_item=${menu_item#* } ;;
+    $DIALOG_EXTRA)
+      # We use this for diff
+      ;;
+    # $DIALOG_ITEM_HELP)    # Item-help button pressed.
+    #   menu_item2=${menu_item2#* }
+    #   return $rc ;;
+    $DIALOG_CANCEL | $DIALOG_ESC)
+      # process as cancel/Exit
+      return 1 ;;
+    * )
+      # everything else
+      return $rc ;;
+  esac
 
   # recover the associated line in the output of the command
   # Format "* branch/tdescription"
@@ -159,22 +168,24 @@ function do_again() {
   file=$( echo "$entry" | cut -d':' -f1 )
   file=$( realpath "$file" )
 
-  if [[ $rc == 0 ]]; then
+  if [[ $rc == $DIALOG_OK ]]; then
     # echo -n "$file" | xclip -selection clipboard
     add2filehistory "$file"
-    less +$jumpto -p"${grep_pattern}" $ignore_case "$file"
+    less +$jumpto -N -p"${grep_pattern}" $ignore_case "$file"
     lastfile="$file"
-  elif [[ $rc == 3 ]]; then
+  elif [[ $rc == $DIALOG_EXTRA ]]; then
     if [[ -n "${lastfile}" ]]; then
+      # echo -n "$file" | xclip -selection clipboard
       add2filehistory "$file"
       diff -w "${lastfile}" "${file}" | less
     fi
     lastfile="${file}"
-  elif [[ $rc == 2 ]]; then
+  elif [[ $rc == $DIALOG_HELP ]]; then
+    # echo -n "$file" | xclip -selection clipboard
     add2filehistory "$file"
-    # eval $EDITER
+    eval $EDITER
     # gedit +$jumpto "$file"
-    atom -a "${file}:${jumpto}"
+    # atom -a "${file}:${jumpto}"
     # less $menu_output
     lastfile="$file"
   fi
@@ -182,14 +193,11 @@ function do_again() {
 }
 
 function make_menu() {
-  #replace ls with what you want
-  # search_tree "--no-color" | sed 's/ *$//g' >$command_output
   grep_tree "$@" |
     sed '/^.git/d' |
     sed 's/\t/|-|-|-|/' |
     sed 's/\\/\\\\/g' |
     sed 's/"/\\"/g' >$command_output
-
   if [[ -s $command_output ]]; then
     #build a dialog configuration file
     cat $command_output |
@@ -237,6 +245,9 @@ if make_menu "$@"; then
       :
     elif [[ $rc == 3 ]]; then   # Extra
       :
+    elif [[ $rc == 255 ]]; then   # ESC
+      clear
+      break
     else
       clear
       echo "Error: $rc"
@@ -245,7 +256,7 @@ if make_menu "$@"; then
     fi
   done
   echo "$namesh "${cmd_args[@]}
-  echo " grep_pattern: \"${grep_pattern}\""
+  echo "  grep_pattern: \"${grep_pattern}\""
   printf '  %s\n' "${filehistory[@]}"
 else
   echo "Empty search results for:"
