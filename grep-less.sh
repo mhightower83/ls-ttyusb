@@ -51,8 +51,10 @@ fi
 
 function print_help() {
   cat <<EOF
-Recursive search for files with matching patterns. Use dialog to present
-results with sha1 hash and details. From the menu you can view/diff/edit.
+Recursive search for files with matching patterns. Use dialog to present each
+file with sha1 hash and other details. Contents of the file are not shown on
+the top menu. From the top menu you can select view/diff/edit. $namesh and
+m${namesh} are very simalar.
 
 $namesh pattern [ [-iv] pattern2 ] [ [-iv] pattern3 ]
 EOF
@@ -271,7 +273,7 @@ trap "rm $command_output;
       rm $temp_io;
       rm $menu_config;" SIGHUP SIGINT SIGTERM
 
-if [[ -z "${1}" ]]; then
+if [[ -z "${1}" || "--help" == "${1}" ]]; then
   print_help
   exit 255
 fi

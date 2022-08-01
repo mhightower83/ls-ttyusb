@@ -52,7 +52,9 @@ fi
 function print_help() {
   cat <<EOF
 Recursive search for files with matching patterns. Use dialog to present
-resulting lines containing matches. From the menu you can view/diff/edit.
+resulting lines containing matches. Multiple lines for a file will appear when
+multiple matches in a file are found. From the top menu you can selected
+view/diff/edit. $namesh and ${namesh:1} are very simalar.
 
 $namesh pattern [ [-iv] pattern2 ] [ [-iv] pattern3 ]
 EOF
@@ -70,6 +72,16 @@ function statusfile() {
 export -f statusfile
 
 grep_tree() {
+  if [[ "--" == "${1:0:2}" ]]; then
+    # experimental - escaping for grep needs to be removed search pattern not compatable with less etc.
+    if hash rg 2>/dev/null; then
+      rg --files-with-matches "${@}" 2>/dev/null
+      return $?
+    else
+      rg --help
+      return 1
+    fi
+  fi
   search_tree_output=$(mktemp)
   search_tree_output_in=$(mktemp)
   unset options
@@ -227,7 +239,7 @@ trap "rm $command_output;
       rm $menu_output;
       rm $menu_config;" SIGHUP SIGINT SIGTERM
 
-if [[ -z "${1}" ]]; then
+if [[ -z "${1}" || "--help" == "${1}" ]]; then
   print_help
   exit 255
 fi
