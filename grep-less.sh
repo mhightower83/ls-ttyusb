@@ -51,12 +51,12 @@ fi
 
 function print_help() {
   cat <<EOF
-Recursive search for files with matching patterns. Use dialog to present each
-file with sha1 hash and other details. Contents of the file are not shown on
-the top menu. From the top menu you can select view/diff/edit. $namesh and
-m${namesh} are very simalar.
+Recursive search for files with matching patterns. Uses "dialog" to present each
+file with sha1 hash and other details. Contents of the file are not shown on the
+top menu. From the top menu, you can select view/diff/edit. $namesh and
+m${namesh} are very similar.
 
-$namesh pattern [ [-iv] pattern2 ] [ [-iv] pattern3 ]
+$namesh [-iv] pattern [ [-iv] pattern2 ] [ [-iv] pattern3 ]
 EOF
 }
 

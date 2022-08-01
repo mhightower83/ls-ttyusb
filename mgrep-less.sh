@@ -51,12 +51,12 @@ fi
 
 function print_help() {
   cat <<EOF
-Recursive search for files with matching patterns. Use dialog to present
+Recursive search for files with matching patterns. Uses "dialog" to present
 resulting lines containing matches. Multiple lines for a file will appear when
-multiple matches in a file are found. From the top menu you can selected
-view/diff/edit. $namesh and ${namesh:1} are very simalar.
+multiple matches in a file are found. From the top menu, you can selected
+view/diff/edit. $namesh and ${namesh:1} are very similar.
 
-$namesh pattern [ [-iv] pattern2 ] [ [-iv] pattern3 ]
+$namesh [-iv] pattern [ [-iv] pattern2 ] [ [-iv] pattern3 ]
 EOF
 }
 
