@@ -47,6 +47,7 @@ if [[ "-" == "${1:0:1}" ]]; then
 else
   grep_pattern="${1}"
 fi
+[[ -n "$ignore_case" && -n "$grep_pattern" ]] && grep_pattern="${grep_pattern,,}"
 
 function print_help() {
   cat <<EOF
@@ -87,7 +88,11 @@ function statusfile5() {
 
 function statusfile() {
   list=$( sha1sum "$1" )
-  printf "%s %${maxwidth}s  " "${list%% *}" "${list##*/}"
+  SHA1="${list%% *}"
+  FILE_NAME="${list#* }"
+  FILE_NAME="${FILE_NAME#\*}"
+  FILE_NAME="${FILE_NAME# }"
+  printf "%s %${maxwidth}s  " "$SHA1" "$FILE_NAME"
   stat --print="%.19y %8s %h  %N\n" "${1}"
 }
 export -f statusfile
@@ -238,7 +243,7 @@ function do_again() {
   file=$( echo "$entry" | cut -d\' -f2 )
   file=$( realpath "$file" )
   if [[ -f "${file}" && -n "${grep_pattern}" ]]; then
-    jumpto=$( grep -nm1 "${grep_pattern}" "${file}" | cut -d\: -f1 )
+    jumpto=$( grep $ignore_case -nm1 "${grep_pattern}" "${file}" | cut -d\: -f1 )
   fi
   if [[ $rc == $DIALOG_OK ]]; then
     # echo -n "$file" | xclip -selection clipboard
