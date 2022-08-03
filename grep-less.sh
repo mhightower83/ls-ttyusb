@@ -71,6 +71,7 @@ function statusfile() {
   FILE_NAME="${list#* }"
   FILE_NAME="${FILE_NAME#\*}"
   FILE_NAME="${FILE_NAME# }"
+  FILE_NAME="${FILE_NAME##*/}"
   printf "%s %${maxwidth}s  " "$SHA1" "$FILE_NAME"
   stat --print="%.19y %8s %h  %N\n" "${1}"
 }
@@ -206,10 +207,13 @@ function do_again() {
   if [[ -f "${file}" && -n "${grep_pattern}" ]]; then
     jumpto=$( grep $ignore_case -nm1 "${grep_pattern}" "${file}" | cut -d\: -f1 )
   fi
+  [[ -z "${jumpto}" ]] && echo "'$jumpto'=\$( grep $ignore_case -nm1 \"${grep_pattern}\" \"${file}\" | cut -d\: -f1 )"
   if [[ $rc == $DIALOG_OK ]]; then
     # echo -n "$file" | xclip -selection clipboard
     add2filehistory "$file"
-    less +$jumpto -N -p"${grep_pattern}" $ignore_case "$file"
+    GREP_PATTERN="${grep_pattern/(/\\(}"
+    GREP_PATTERN="${GREP_PATTERN/)/\\)}"
+    less +$jumpto -N -p"${GREP_PATTERN}" $ignore_case "$file"
     lastfile="$file"
   elif [[ $rc == $DIALOG_EXTRA ]]; then
     if [[ -n "${lastfile}" ]]; then

@@ -183,7 +183,9 @@ function do_again() {
   if [[ $rc == $DIALOG_OK ]]; then
     # echo -n "$file" | xclip -selection clipboard
     add2filehistory "$file"
-    less +$jumpto -N -p"${grep_pattern}" $ignore_case "$file"
+    GREP_PATTERN="${grep_pattern/(/\\(}"
+    GREP_PATTERN="${GREP_PATTERN/)/\\)}"
+    less +$jumpto -N -p"${GREP_PATTERN}" $ignore_case "$file"
     lastfile="$file"
   elif [[ $rc == $DIALOG_EXTRA ]]; then
     if [[ -n "${lastfile}" ]]; then
