@@ -40,7 +40,7 @@ cmd_args="$@"
 
 unset ignore_case
 if [[ "-" == "${1:0:1}" ]]; then
-  if [[ "-i" == "${1:0:2}" ]]; then
+  if [[ "-i" == "${1:0:2}" || "-vi" == "${1:0:3}" ]]; then
     ignore_case="-i"
   fi
   grep_pattern="${2}"
@@ -57,6 +57,13 @@ top menu. From the top menu, you can select view/diff/edit. $namesh and
 m${namesh} are very similar.
 
 $namesh [-iv] pattern [ [-iv] pattern2 ] [ [-iv] pattern3 ]
+
+-i    ignore case
+-v    find files not containing the pattern
+
+Additional options after -i or -iv will passthrough to grep.
+Unknown which additional options would be useful.
+
 EOF
 }
 
