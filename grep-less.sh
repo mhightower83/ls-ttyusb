@@ -38,16 +38,6 @@ fi
 namesh="${0##*/}"
 cmd_args="$@"
 
-unset ignore_case
-if [[ "-" == "${1:0:1}" ]]; then
-  if [[ "-i" == "${1:0:2}" || "-vi" == "${1:0:3}" ]]; then
-    ignore_case="-i"
-  fi
-  grep_pattern="${2}"
-else
-  grep_pattern="${1}"
-fi
-[[ -n "$ignore_case" && -n "$grep_pattern" ]] && grep_pattern="${grep_pattern,,}"
 
 function print_help() {
   cat <<EOF
@@ -61,8 +51,8 @@ $namesh [-iv] pattern [ [-iv] pattern2 ] [ [-iv] pattern3 ]
 -i    ignore case
 -v    find files not containing the pattern
 
-Additional options after -i or -iv will passthrough to grep.
-Unknown which additional options would be useful.
+Additional options after -i or -iv will pass through to grep.
+Unknown which additional options would be helpful.
 
 EOF
 }
@@ -84,7 +74,15 @@ function statusfile() {
 }
 export -f statusfile
 
-grep_tree() {
+function grep_tree() {
+  local PATTERN search_tree_output ignore_case exclude_pattern options
+  local search_tree_output_in
+
+  # Must write directly a file to capture output not stdout.
+  # This way we can set LESS_PATTERN for the caller. Cannot do this when
+  # running from a separate shell. eg. var=$( function ) will not work.
+  search_tree_output="$1"
+  shift
   if [[ "--" == "${1:0:2}" ]]; then
     # experimental - escaping for grep needs to be removed search pattern not compatable with less etc.
     if hash rg 2>/dev/null; then
@@ -95,9 +93,7 @@ grep_tree() {
       return 1
     fi
   fi
-  search_tree_output=$(mktemp)
-  search_tree_output_in=$(mktemp)
-  unset options
+  options=""
   if [[ "-" == "${1:0:1}" ]]; then
     options="${1:1}"
     shift
@@ -105,25 +101,55 @@ grep_tree() {
   if [[ -z "${1}" ]]; then
     return
   fi
-  grep -rRnI${options} -Dskip "${1}" 2>/dev/null >${search_tree_output}
+  ignore_case=""
+  exclude_pattern=""
+  if [[ -n "${options}" ]]; then
+    [[ "${options:0:1}" == "i" || "${options:1:1}" == "i" ]] && ignore_case="-i"
+    [[ "${options:0:1}" == "v" || "${options:1:1}" == "v" ]] && exclude_pattern="-v"
+  fi
+  LESS_PATTERN=""
+  if [[ -z "$exclude_pattern" ]]; then
+    PATTERN="$1"
+    if [[ -n "$ignore_case" ]]; then
+      PATTERN="${PATTERN,,}"
+      LESS_IGNORE_CASE="-i"
+    fi
+    LESS_PATTERN="${PATTERN}"
+  fi
+  grep -rRnIT${options} -Dskip "${1}" 2>/dev/null >${search_tree_output}
   shift
+
+  search_tree_output_in=$(mktemp)
   while [ -n "${1}" ]; do
     mv ${search_tree_output} ${search_tree_output_in}
+    options=""
     if [[ "-" == "${1:0:1}" ]]; then
-      if [[ -n "${2}" ]]; then
-        grep ${1} "${2}" <${search_tree_output_in} 2>/dev/null >${search_tree_output}
-        shift
-      else
-        mv ${search_tree_output_in} ${search_tree_output}
-        echo "${0}:1: stray command line option \"${1}\" without pattern" >>${search_tree_output}
-      fi
-    else
-      grep "${1}" <${search_tree_output_in} 2>/dev/null >${search_tree_output}
+      options="${1}"
+      shift
     fi
-    shift
+    ignore_case=""
+    exclude_pattern=""
+    if [[ -n "${options}" ]]; then
+      [[ "${options:1:1}" == "i" || "${options:2:1}" == "i" ]] && ignore_case="-i"
+      [[ "${options:1:1}" == "v" || "${options:2:1}" == "v" ]] && exclude_pattern="-v"
+    fi
+    if [[ -z "$exclude_pattern" ]]; then
+      PATTERN="$1"
+      [[ -n "$ignore_case" ]] && PATTERN="${PATTERN,,}"
+      if [[ -n "${LESS_PATTERN}" ]]; then
+        LESS_PATTERN="${LESS_PATTERN}|${PATTERN}"
+      else
+        LESS_PATTERN="${PATTERN}"
+      fi
+    fi
+    if [[ -n "${1}" ]]; then
+      grep ${options} "${1}" <${search_tree_output_in} 2>/dev/null >${search_tree_output}
+      shift
+    else
+      mv ${search_tree_output_in} ${search_tree_output}
+      echo "${0}:1: stray command line option \"${1}\" without pattern" >>${search_tree_output}
+    fi
   done
-  [ -f $search_tree_output ] && cat ${search_tree_output}
-  [ -f $search_tree_output ] && rm $search_tree_output
   [ -f ${search_tree_output_in} ] && rm ${search_tree_output_in}
 }
 
@@ -167,7 +193,7 @@ function do_again() {
     --column-separator "\t" \
     --title "Recursive Grep Results" \
     --default-item $menu_item \
-    --menu "Primary search pattern, \"${grep_pattern}\", results. Pick a file to view:" 0 0 0 \
+    --menu "Search results pick a file to view using less pattern, \"${LESS_PATTERN}\"." 0 0 0 \
     --file $menu_config 2>&1 1>&3)
     # --file $menu_config 2>$menu_output
 
@@ -211,16 +237,17 @@ function do_again() {
   jumpto=1
   file=$( echo "$entry" | cut -d\' -f2 )
   file=$( realpath "$file" )
-  if [[ -f "${file}" && -n "${grep_pattern}" ]]; then
-    jumpto=$( grep $ignore_case -nm1 "${grep_pattern}" "${file}" | cut -d\: -f1 )
+  if [[ -f "${file}" && -n "${LESS_PATTERN}" ]]; then
+    jumpto=$( grep $LESS_IGNORE_CASE -nm1 "${LESS_PATTERN%%|*}" "${file}" | cut -d\: -f1 )
   fi
-  [[ -z "${jumpto}" ]] && echo "'$jumpto'=\$( grep $ignore_case -nm1 \"${grep_pattern}\" \"${file}\" | cut -d\: -f1 )"
+  [[ -z "${jumpto}" ]] && echo "'$jumpto'=\$( grep $LESS_IGNORE_CASE -nm1 \"${LESS_PATTERN%%|*}\" \"${file}\" | cut -d\: -f1 )"
+
   if [[ $rc == $DIALOG_OK ]]; then
     # echo -n "$file" | xclip -selection clipboard
     add2filehistory "$file"
-    GREP_PATTERN="${grep_pattern/(/\\(}"
-    GREP_PATTERN="${GREP_PATTERN/)/\\)}"
-    less +$jumpto -N -p"${GREP_PATTERN}" $ignore_case "$file"
+    LESS_PATTERN="${LESS_PATTERN/(/\\(}"
+    LESS_PATTERN="${LESS_PATTERN/)/\\)}"
+    less +$jumpto -N -p"${LESS_PATTERN}" $LESS_IGNORE_CASE "$file"
     lastfile="$file"
   elif [[ $rc == $DIALOG_EXTRA ]]; then
     if [[ -n "${lastfile}" ]]; then
@@ -242,10 +269,14 @@ function do_again() {
 }
 
 function make_menu() {
-  grep_tree "$@" |
+  search_tree_output=$(mktemp)
+  grep_tree "$search_tree_output" "$@"
+  cat $search_tree_output |
     cut -d':' -f1 | sort -u |
     sed '/^.git/d' |
     sed 's/"/\\"/g' >$command_output
+  [ -f $search_tree_output ] && rm $search_tree_output
+
   if [[ -s $command_output ]]; then
     mv $command_output $temp_io
     # build a dialog menu configuration file
@@ -277,6 +308,8 @@ temp_io=$(mktemp)
 lastfile=""
 menu_item=1
 maxwidth=20
+LESS_PATTERN=""
+LESS_IGNORE_CASE=""
 
 #make sure the temporary files are removed even in case of interruption
 trap "rm $command_output;
@@ -313,7 +346,7 @@ if make_menu "$@"; then
     fi
   done
   echo "$namesh "${cmd_args[@]}
-  echo "  grep_pattern: \"${grep_pattern}\""
+  echo "  less pattern: \"${LESS_PATTERN}\""
   printf '  %s\n' "${filehistory[@]}"
 else
   echo "Empty search results for:"
