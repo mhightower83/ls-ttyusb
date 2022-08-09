@@ -245,9 +245,10 @@ function do_again() {
   if [[ $rc == $DIALOG_OK ]]; then
     # echo -n "$file" | xclip -selection clipboard
     add2filehistory "$file"
-    LESS_PATTERN="${LESS_PATTERN/(/\\(}"
-    LESS_PATTERN="${LESS_PATTERN/)/\\)}"
-    less +$jumpto -N -p"${LESS_PATTERN}" $LESS_IGNORE_CASE "$file"
+    local _less_pattern="$LESS_PATTERN"
+    _less_pattern="${_less_pattern/(/\\(}"
+    _less_pattern="${_less_pattern/)/\\)}"
+    less +$jumpto -N -p"${_less_pattern}" $LESS_IGNORE_CASE "$file"
     lastfile="$file"
   elif [[ $rc == $DIALOG_EXTRA ]]; then
     if [[ -n "${lastfile}" ]]; then
