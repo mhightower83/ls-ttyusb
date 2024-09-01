@@ -20,6 +20,8 @@
 
 # EDITER='gedit +$jumpto "${file}"'
 EDITER='atom -a "${file}:${jumpto}"'
+# PDFVIEWER='evince "${file}"'
+SYSTEMVIEWER='xdg-open "${file}"'
 
 # set config file
 DIALOGRC=$( realpath ~/.dialogrc.dark )
@@ -166,7 +168,25 @@ function do_again() {
   if [[ $rc == 0 ]]; then
     # echo -n "$file" | xclip -selection clipboard
     add2filehistory "$file"
-    less +$jumpto -N "$file"
+    file_type=$(file --brief --mime "$file" | cut -d';' -f1)
+    case "$file_type" in
+      "text/plain")
+        less +$jumpto -N "$file" ;;
+      "inode/x-empty")
+        clear
+        echo "File: '$file'"
+        echo "  mime: '$file_type'"
+        read -n1
+        ;;
+      *)
+        case "${file##*.}" in
+          ino|c|cpp|h|hpp)
+            less +$jumpto -N "$file" ;;
+          *)
+            eval $SYSTEMVIEWER ;;
+        esac
+        ;;
+    esac
     lastfile="$file"
     # echo "less +$jumpto \"$file\""
   elif [[ $rc == 3 ]]; then
